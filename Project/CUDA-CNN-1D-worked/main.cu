@@ -1,18 +1,25 @@
+/*  Compile: make
+	Execute: ./CNN
+
+	This file is the main file of all code and it will call the kernel functions from device. 
+*/
+
+
 #define USE_MNIST_LOADER
 #define MNIST_DOUBLE
 #include "mnist.h"
 #include "layer.h"
-
 #include <cuda.h>
 #include <cstdio>
 #include <time.h>
+
 #define BLOCKSIZE 64
 #define GRIDSIZE 64
 
 static mnist_data *train_set, *test_set;
 static unsigned int train_cnt, test_cnt;
 
-// Define layers of CNN
+/* Define layers of CNN*/
 static Layer l_input = Layer(0, 0, 28*28);
 static Layer l_c1 = Layer(5*5, 6, 24*24*6);//convolutional layer
 static Layer l_s1 = Layer(4*4, 1, 6*6*6); //pooling
@@ -24,7 +31,7 @@ static void test();
 static double forward_pass(double data[28][28]);
 static double back_pass();
 
-//load minist data and get its total number
+/*Load MNIST dataset */
 static inline void loaddata()
 {
 	mnist_load("data/train-images.idx3-ubyte", "data/train-labels.idx1-ubyte",
@@ -36,7 +43,6 @@ static inline void loaddata()
 int main(int argc, const  char **argv)
 {
 	srand(time(NULL));
-
 	CUresult err = cuInit(0);
 	if (err != CUDA_SUCCESS) {
 		fprintf(stderr, "CUDA initialisation failed with error code - %d\n", err);
@@ -50,7 +56,7 @@ int main(int argc, const  char **argv)
 	return 0;
 }
 
-// Forward propagation of a single row in dataset
+/* Forward propagation of a single row in dataset*/
 static double forward_pass(double data[28][28])
 {
 	float input[28][28];
@@ -61,6 +67,7 @@ static double forward_pass(double data[28][28])
 		}
 	}
 
+	// Initial the value of weights of all layers
 	l_input.clear();
 	l_c1.clear();
 	l_s1.clear();
@@ -68,22 +75,23 @@ static double forward_pass(double data[28][28])
 
 	clock_t start, end;
 	start = clock();
+
 	/*input data sent*/
 	int datasize[1] ;
 	datasize[0] = 28;
 	l_input.setOutput((float *)input,(int *)datasize);
-        // convolutional layer, calculate the output, bias and give them to the activation function
+
+	// Call the kernel funciton of computation of convolutional layer 
 	fp_preact_c1<<<BLOCKSIZE, GRIDSIZE>>>((float*) l_input.output, (float*) l_c1.preact, (float*) l_c1.weight, l_c1.preactsize,28,5,6);
 	fp_bias_c1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_c1.preact, l_c1.bias,l_c1.preactsize, 6);
 	apply_step_function<<<BLOCKSIZE, GRIDSIZE>>>(l_c1.preact, l_c1.output, l_c1.O);
-        
-	// pooling layer, calculate the output
+
+	// Call the kernel function of computation of pooling layer 
 	fp_preact_s1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_c1.output, (float*)l_s1.preact, (float*)l_s1.weight,l_s1.preactsize,l_c1.preactsize,l_c1.N,4);
 	fp_bias_s1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_s1.preact, l_s1.bias, l_s1.preactsize,l_c1.N);
 	apply_step_function<<<BLOCKSIZE, GRIDSIZE>>>(l_s1.preact, l_s1.output, l_s1.O);
 
-	
-	// dense layer, calculate the output, bias and give them to the activation function, then output (10 nodes)
+	// Call the kernel function of the coputation of dense layer and output layer
 	fp_preact_f<<<BLOCKSIZE, GRIDSIZE>>>((float* )l_s1.output, l_f.preact, (float*)l_f.weight, l_s1.preactsize, l_c1.N,l_f.O);
 	fp_bias_f<<<BLOCKSIZE, GRIDSIZE>>>(l_f.preact, l_f.bias,l_f.O);
 	apply_step_function<<<BLOCKSIZE, GRIDSIZE>>>(l_f.preact, l_f.output, l_f.O);
@@ -98,22 +106,24 @@ static double back_pass()
 	clock_t start, end;
 
 	start = clock();
-        //there is no front information for output layer, we can just calculate the delta w and delta b
+
+	// Back Propogation of the output layer
 	bp_weight_f<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_f.d_weight, l_f.d_preact, (float*)l_s1.output, l_f.O, l_c1.N,l_s1.preactsize);
 	bp_bias_f<<<BLOCKSIZE, GRIDSIZE>>>(l_f.bias, l_f.d_preact,l_f.O);
-        
-	// do what is mentioned in report
+
+	// Calculate the back Propogation of the pooling layers
 	bp_output_s1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_s1.d_output, (float*)l_f.weight, l_f.d_preact, l_f.O,l_c1.N,l_s1.preactsize);
 	bp_preact_s1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_s1.d_preact, (float*)l_s1.d_output, (float*)l_s1.preact, l_c1.N,l_s1.preactsize);
 	bp_weight_s1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_s1.d_weight, (float*)l_s1.d_preact, (float*)l_c1.output, l_s1.N,4,l_c1.N,l_s1.preactsize,l_c1.preactsize);
 	bp_bias_s1<<<BLOCKSIZE, GRIDSIZE>>>(l_s1.bias, (float*)l_s1.d_preact, l_c1.N, l_s1.preactsize);
-        // do what is mentioned in report
+
+	// Calculate the back Propogation of the convolutional layer and input layer
 	bp_output_c1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_c1.d_output, (float*)l_s1.weight, (float*)l_s1.d_preact, l_s1.N,4,l_c1.N,l_s1.preactsize,l_c1.preactsize);
 	bp_preact_c1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_c1.d_preact, (float*)l_c1.d_output, (float*)l_c1.preact,l_c1.N,l_c1.preactsize);
 	bp_weight_c1<<<BLOCKSIZE, GRIDSIZE>>>((float*)l_c1.d_weight, (float*)l_c1.d_preact, (float*)l_input.output,l_c1.N,5,l_c1.preactsize,l_input.preactsize);
 	bp_bias_c1<<<BLOCKSIZE, GRIDSIZE>>>(l_c1.bias, (float*)l_c1.d_preact, l_c1.N, l_c1.preactsize);
 
-        //apply grade according to the delta w
+	// Update the weights of layers
 	apply_grad<<<BLOCKSIZE, GRIDSIZE>>>(l_f.weight, l_f.d_weight, l_f.M * l_f.N);
 	apply_grad<<<BLOCKSIZE, GRIDSIZE>>>(l_s1.weight, l_s1.d_weight, l_s1.M * l_s1.N);
 	apply_grad<<<BLOCKSIZE, GRIDSIZE>>>(l_c1.weight, l_c1.d_weight, l_c1.M * l_c1.N);
@@ -144,7 +154,9 @@ static void learn()
 	cublasCreate(&blas);
 
 	float err;
-	int iter = 5;
+
+	//Define the maximum number of iterations
+	int iter = 50;
 
 	double time_taken = 0.0;
 
@@ -155,19 +167,19 @@ static void learn()
 
 		for (int i = 0; i < train_cnt; ++i) {
 			float tmp_err;
-            
-			time_taken += forward_pass(train_set[i].data); //forward pass
+
+			time_taken += forward_pass(train_set[i].data);
 
 			l_f.bp_clear();
 			l_s1.bp_clear();
 			l_c1.bp_clear();
 
 			// Euclid distance of train_set[i]
-			makeError<<<10, 1>>>(l_f.d_preact, l_f.output, train_set[i].label, 10); //calculate error
+			makeError<<<10, 1>>>(l_f.d_preact, l_f.output, train_set[i].label, 10);
 			cublasSnrm2(blas, 10, l_f.d_preact, 1, &tmp_err); //calculate the norm2
 			err += tmp_err;
 
-			time_taken += back_pass(); //back propagation
+			time_taken += back_pass();
 		}
 
 		err /= train_cnt;

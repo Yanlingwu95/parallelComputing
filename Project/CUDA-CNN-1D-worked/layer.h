@@ -1,3 +1,26 @@
+
+/*  This file is to create layer class*/
+
+/*  
+	The layer's construction function Layer(M,N,O) 
+		M is the input size, 
+		N is the nodes size, 
+		O is the output size. 
+
+	A layer should have: 
+		output(after activation function), 
+		preact(before activation function), 
+		preactsize(the size of output),bias, 
+		weights(nodes*row*column), 
+		d_output(for backpropagation),
+		d_preact(for back propagation),
+		d_weight(for back propagation);
+
+	All the clean functions
+
+*/
+
+
 #include <cstdlib>
 #include <vector>
 #include <memory>
@@ -7,15 +30,9 @@
 #ifndef LAYER_H
 #define LAYER_H
 #endif
-/* this file is to create layer class*/
 
 const static float dt = 1.0E-01f;
 const static float threshold = 1.0E-02f;
-
-/* a layer should have: output(after activation function), preact(before activation function), preactsize(the size of output),
-bias, weights(nodes*row*column), d_output(for backpropagation),d_preact(for back propagation),d_weight(for back propagation)
-and its construction function Layer(M,N,O) M is the input size, N is the nodes size, O is the output size. Also setOutput is for
-the first layer, need to set images as output, and all the clean functions*/
 
 class Layer {
 	public:
@@ -36,6 +53,7 @@ class Layer {
 
 	~Layer();
 
+	//SetOutput is for the first layer, need to set images as output,
 	void setOutput(float *data,int* datasize);
 	void clear();
 	void bp_clear();
@@ -55,6 +73,10 @@ __global__ void fp_preact_s1(float* input, float* preact, float* weight, int* pr
 __global__ void fp_bias_s1(float* preact, float* bias, int* res, int nodes);
 __global__ void fp_preact_f(float* input, float* preact, float* weight, int* res, int last_nodes, int nodes);
 __global__ void fp_bias_f(float* preact, float* bias, int nodes);
+__global__ void fp_preact_dense(float* input, float* preact, float* weight, int* preactsize, int* img, int kernel, int nodes);
+__global__ void fp_bias_dense(float* preact, float* bias, int* preactsize, int nodes);
+
+
 
 // Back propagation kernels
 __global__ void bp_weight_f(float* d_weight, float* d_preact, float* p_output,int nodes,int last_nodes,int* res);
@@ -67,3 +89,8 @@ __global__ void bp_output_c1(float* d_output, float* n_weight, float* nd_preact,
 __global__ void bp_preact_c1(float* d_preact, float* d_output, float* preact,int nodes, int* res);
 __global__ void bp_weight_c1(float* d_weight, float* d_preact, float* p_output,int nodes, int kernel, int* res, int* lastres);
 __global__ void bp_bias_c1(float* bias, float* d_preact, int nodes, int* res);
+__global__ void bp_output_dense(float* d_output, float* n_weight, float* nd_preact,int before_nodes, int before_kernel,int nodes, int* before_res, int* res);
+__global__ void bp_preact_dense(float* d_preact, float* d_output, float* preact, int nodes, int* res);
+__global__ void bp_weight_dense(float* d_weight, float* d_preact, float* p_output, int nodes, int kernel, int* res, int* lastres);
+__global__ void bp_bias_dense(float* bias, float* d_preact,int nodes, int* res);
+
