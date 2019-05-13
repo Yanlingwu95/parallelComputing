@@ -7,9 +7,15 @@
 #ifndef LAYER_H
 #define LAYER_H
 #endif
+/* this file is to create layer class*/
 
 const static float dt = 1.0E-01f;
 const static float threshold = 1.0E-02f;
+
+/* a layer should have: output(after activation function), preact(before activation function), preactsize(the size of output),
+bias, weights(nodes*row*column), d_output(for backpropagation),d_preact(for back propagation),d_weight(for back propagation)
+and its construction function Layer(M,N,O) M is the input size, N is the nodes size, O is the output size. Also setOutput is for
+the first layer, need to set images as output, and all the clean functions*/
 
 class Layer {
 	public:
